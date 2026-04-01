@@ -428,12 +428,12 @@ function New-HtmlReport {
     }
 
     $rowsHtml = ($Findings | ForEach-Object {
-        $badgeColor = switch ($_.FindingType) {
-            "stale"        { "#f59e0b" }
-            "large_file"   { "#3b82f6" }
-            "version_bloat"{ "#8b5cf6" }
-            "duplicate"    { "#ef4444" }
-            default        { "#6b7280" }
+        $badgeClass = switch ($_.FindingType) {
+            "stale"         { "badge badge-stale" }
+            "large_file"    { "badge badge-large" }
+            "version_bloat" { "badge badge-version" }
+            "duplicate"     { "badge badge-duplicate" }
+            default         { "badge" }
         }
         $label = switch ($_.FindingType) {
             "stale"        { "Stale" }
@@ -443,18 +443,19 @@ function New-HtmlReport {
             default        { $_.FindingType }
         }
         $savings = Format-Bytes $_.PotentialSavingsBytes
-        $size = Format-Bytes $_.FileSizeBytes
-        $modDate = if ($_.LastModified) { $_.LastModified.Substring(0,10) } else { "Unknown" }
+        $size    = Format-Bytes $_.FileSizeBytes
+        $modDate = if ($_.LastModified) { $_.LastModified.Substring(0,10) } else { "—" }
+        $path    = $_.SiteUrl -replace 'https://[^/]+', ''
 
         "<tr>
-            <td><span style='background:$badgeColor;color:#fff;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600'>$label</span></td>
-            <td title='$($_.FilePath)'>$($_.FileName)</td>
-            <td style='color:#9ca3af;font-size:12px' title='$($_.FilePath)'>$($_.SiteUrl -replace 'https://[^/]+','')</td>
+            <td><span class='$badgeClass' data-type='$($_.FindingType)'>$label</span></td>
+            <td class='fname' title='$($_.FilePath)'>$($_.FileName)</td>
+            <td class='muted sm' title='$($_.FilePath)'>$path</td>
             <td>$size</td>
-            <td>$modDate</td>
-            <td>$($_.VersionsCount)</td>
-            <td style='color:#22c55e;font-weight:600'>$savings</td>
-            <td style='color:#6b7280;font-size:12px'>$($_.Details)</td>
+            <td class='muted'>$modDate</td>
+            <td class='muted'>$($_.VersionsCount)</td>
+            <td class='savings'>$savings</td>
+            <td class='muted sm'>$($_.Details)</td>
         </tr>"
     }) -join "`n"
 
@@ -462,92 +463,154 @@ function New-HtmlReport {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>StorageScan Local Report - $now</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>StorageScan Local Report &mdash; $now</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f0f12;color:#e5e7eb;min-height:100vh}
-    .header{background:linear-gradient(135deg,#1a1a22 0%,#12121a 100%);border-bottom:1px solid #27272a;padding:32px 40px}
-    .header h1{font-size:28px;font-weight:800;color:#fff;letter-spacing:-0.5px}
-    .header h1 span{color:#eab308}
-    .header p{color:#6b7280;margin-top:6px;font-size:14px}
-    .container{max-width:1400px;margin:0 auto;padding:32px 40px}
-    .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:32px}
-    .card{background:#18181b;border:1px solid #27272a;border-radius:12px;padding:20px}
-    .card .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin-bottom:8px}
-    .card .value{font-size:26px;font-weight:800;color:#fff}
-    .card .value.green{color:#22c55e}
-    .card .value.yellow{color:#eab308}
-    .card .sub{font-size:12px;color:#6b7280;margin-top:4px}
-    .section-title{font-size:18px;font-weight:700;color:#fff;margin-bottom:16px;display:flex;align-items:center;gap:10px}
-    .section-title::before{content:'';display:inline-block;width:4px;height:18px;background:#eab308;border-radius:2px}
-    .table-wrap{overflow-x:auto;border-radius:12px;border:1px solid #27272a;margin-bottom:32px}
+    :root{
+      --bg:#0d0d12;--surface:#13131a;--surface2:#1a1a24;--border:#21212e;
+      --text:#e2e2ea;--muted:#6b6b7e;
+      --orange:#CF4B00;--orange-bg:#1c0e06;--orange-border:#2e1a0c;
+      --blue:#9CC6DB;--blue-bg:#0a1620;--blue-border:#0f2030;
+      --gold:#DDBA7D;--gold-bg:#201808;--gold-border:#32280e;
+      --green:#22c55e;--red:#ef4444;--red-bg:#1a0808;--red-border:#2e1010;
+    }
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+    /* ── Top bar ── */
+    .topbar{height:3px;background:linear-gradient(90deg,var(--orange) 0%,var(--gold) 50%,var(--blue) 100%)}
+    /* ── Header ── */
+    .header{background:var(--surface);border-bottom:1px solid var(--border);padding:26px 40px;display:flex;align-items:center;gap:18px}
+    .header-icon{font-size:36px;line-height:1;flex-shrink:0;filter:grayscale(0.1)}
+    .header-text h1{font-size:21px;font-weight:800;color:#fff;letter-spacing:-0.3px}
+    .header-text h1 .brand{color:var(--orange)}
+    .header-text p{color:var(--muted);margin-top:5px;font-size:12.5px;line-height:1.6}
+    /* ── Layout ── */
+    .container{max-width:1440px;margin:0 auto;padding:32px 40px}
+    /* ── Summary cards ── */
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;margin-bottom:32px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden}
+    .card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:12px 12px 0 0;background:var(--accent,var(--border))}
+    .c-total{--accent:var(--orange)}
+    .c-save {--accent:var(--green)}
+    .c-stale{--accent:var(--gold)}
+    .c-large{--accent:var(--blue)}
+    .c-ver  {--accent:var(--orange)}
+    .c-dup  {--accent:var(--red)}
+    .card .lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:10px}
+    .card .val{font-size:30px;font-weight:800;line-height:1;color:#fff}
+    .val.c-orange{color:var(--orange)} .val.c-green{color:var(--green)}
+    .val.c-gold{color:var(--gold)}     .val.c-blue{color:var(--blue)}
+    .card .sub{font-size:11.5px;color:var(--muted);margin-top:6px}
+    /* ── Section ── */
+    .section{font-size:15px;font-weight:700;color:#fff;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+    .section::before{content:'';display:inline-block;width:3px;height:15px;background:var(--orange);border-radius:2px;flex-shrink:0}
+    /* ── Filters ── */
+    .filters{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+    .filters input,.filters select{
+      background:var(--surface);border:1px solid var(--border);border-radius:8px;
+      color:var(--text);padding:7px 12px;font-size:13px;font-family:inherit;outline:none
+    }
+    .filters input{flex:1;min-width:220px}
+    .filters input::placeholder{color:var(--muted)}
+    .filters input:focus,.filters select:focus{border-color:var(--orange);box-shadow:0 0 0 3px var(--orange-bg)}
+    .filters select option{background:var(--surface)}
+    /* ── Pills ── */
+    .pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+    .pill{padding:4px 13px;border-radius:9999px;font-size:12px;font-weight:600;cursor:pointer;
+      border:1px solid var(--border);background:var(--surface);color:var(--muted);
+      transition:all .15s;user-select:none}
+    .pill:hover,.pill.active{border-color:var(--orange);color:var(--orange);background:var(--orange-bg)}
+    /* ── Table ── */
+    .tbl-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);margin-bottom:32px}
     table{width:100%;border-collapse:collapse;font-size:13px}
-    thead{background:#18181b}
-    thead th{padding:12px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;border-bottom:1px solid #27272a;cursor:pointer;user-select:none;white-space:nowrap}
-    thead th:hover{color:#eab308}
-    thead th::after{content:' \25B4\25BE';opacity:0.3;font-size:9px}
-    tbody tr{border-bottom:1px solid #1f1f23;transition:background 0.15s}
-    tbody tr:hover{background:#1f1f23}
-    tbody td{padding:10px 14px;color:#d1d5db;vertical-align:middle;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .search-bar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
-    .search-bar input,.search-bar select{background:#18181b;border:1px solid #27272a;border-radius:8px;color:#e5e7eb;padding:8px 14px;font-size:13px;outline:none}
-    .search-bar input{flex:1;min-width:200px}
-    .search-bar input:focus,.search-bar select:focus{border-color:#eab308}
-    .type-pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-    .pill{padding:5px 14px;border-radius:9999px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #27272a;background:#18181b;color:#9ca3af;transition:all 0.15s}
-    .pill.active,.pill:hover{border-color:#eab308;color:#eab308;background:#1c1a0a}
-    .pill.all{border-color:#eab308;color:#eab308;background:#1c1a0a}
-    .footer{text-align:center;color:#374151;font-size:12px;padding:32px;border-top:1px solid #18181b}
-    .footer a{color:#eab308;text-decoration:none}
-    .no-results{text-align:center;padding:48px;color:#4b5563}
-    @media(max-width:768px){.container,.header{padding:20px 16px}.card .value{font-size:20px}}
+    thead{background:var(--surface)}
+    thead th{padding:11px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;
+      letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border);
+      cursor:pointer;user-select:none;white-space:nowrap}
+    thead th:hover{color:var(--orange)}
+    thead th::after{content:' \25B4\25BE';opacity:.25;font-size:8px}
+    tbody tr{border-bottom:1px solid #15151e;transition:background .1s}
+    tbody tr:hover{background:var(--surface2)}
+    tbody td{padding:10px 14px;color:#c4c4d2;vertical-align:middle;max-width:260px;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    td.muted{color:var(--muted)}
+    td.sm{font-size:12px}
+    td.fname{color:var(--text);font-weight:500}
+    td.savings{color:var(--green);font-weight:600}
+    /* ── Badges ── */
+    .badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:9999px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid transparent}
+    .badge-stale  {background:var(--gold-bg);color:var(--gold);border-color:var(--gold-border)}
+    .badge-large  {background:var(--blue-bg);color:var(--blue);border-color:var(--blue-border)}
+    .badge-version{background:var(--orange-bg);color:var(--orange);border-color:var(--orange-border)}
+    .badge-duplicate{background:var(--red-bg);color:var(--red);border-color:var(--red-border)}
+    /* ── Footer ── */
+    .footer{text-align:center;color:var(--muted);font-size:12px;padding:28px 40px;border-top:1px solid var(--border)}
+    .footer a{color:var(--orange);text-decoration:none}
+    .footer a:hover{text-decoration:underline}
+    .no-results{text-align:center;padding:52px;color:var(--muted);font-size:14px}
+    @media(max-width:768px){
+      .container,.header{padding:20px 16px}
+      .card .val{font-size:24px}
+      .header{flex-direction:column;align-items:flex-start}
+    }
   </style>
 </head>
 <body>
+<div class="topbar"></div>
 <div class="header">
-  <h1>SharePoint <span>StorageScan</span> &mdash; Local Report</h1>
-  <p>Generated: $now &bull; Scope: $ScannedScope &bull; Thresholds: Stale &gt; $StaleThresholdDays days, Large &gt; $LargeFileMB MB, Version Bloat &gt; ${VersionBloatMultiplier}x</p>
+  <div class="header-icon">&#129681;</div>
+  <div class="header-text">
+    <h1><span class="brand">StorageScan</span> &mdash; Local Storage Waste Report</h1>
+    <p>
+      Generated: $now &nbsp;&bull;&nbsp; Scope: $ScannedScope &nbsp;&bull;&nbsp;
+      Stale &gt; $StaleThresholdDays days &nbsp;&bull;&nbsp;
+      Large &gt; $LargeFileMB MB &nbsp;&bull;&nbsp;
+      Version Bloat &gt; ${VersionBloatMultiplier}x
+    </p>
+  </div>
 </div>
 <div class="container">
-  <div class="summary-grid">
-    <div class="card">
-      <div class="label">Total Findings</div>
-      <div class="value yellow">$($Findings.Count)</div>
+  <div class="cards">
+    <div class="card c-total">
+      <div class="lbl">Total Findings</div>
+      <div class="val c-orange">$($Findings.Count)</div>
       <div class="sub">Across all categories</div>
     </div>
-    <div class="card">
-      <div class="label">Potential Savings</div>
-      <div class="value green">$gbSavings GB</div>
-      <div class="sub">&asymp; `$$costSavings / month @ `$0.20/GB</div>
+    <div class="card c-save">
+      <div class="lbl">Potential Savings</div>
+      <div class="val c-green">$gbSavings GB</div>
+      <div class="sub">&asymp; `$$costSavings / mo @ `$0.20/GB</div>
     </div>
-    <div class="card">
-      <div class="label">Stale Files</div>
-      <div class="value">$($countByType.stale)</div>
+    <div class="card c-stale">
+      <div class="lbl">Stale Files</div>
+      <div class="val c-gold">$($countByType.stale)</div>
       <div class="sub">$(Format-Bytes $savingsByType.stale) recoverable</div>
     </div>
-    <div class="card">
-      <div class="label">Large Files</div>
-      <div class="value">$($countByType.large_file)</div>
+    <div class="card c-large">
+      <div class="lbl">Large Files</div>
+      <div class="val c-blue">$($countByType.large_file)</div>
       <div class="sub">$(Format-Bytes $savingsByType.large_file) total</div>
     </div>
-    <div class="card">
-      <div class="label">Version Bloat</div>
-      <div class="value">$($countByType.version_bloat)</div>
+    <div class="card c-ver">
+      <div class="lbl">Version Bloat</div>
+      <div class="val c-orange">$($countByType.version_bloat)</div>
       <div class="sub">$(Format-Bytes $savingsByType.version_bloat) recoverable</div>
     </div>
-    <div class="card">
-      <div class="label">Duplicates</div>
-      <div class="value">$($countByType.duplicate)</div>
+    <div class="card c-dup">
+      <div class="lbl">Duplicates</div>
+      <div class="val">$($countByType.duplicate)</div>
       <div class="sub">$(Format-Bytes $savingsByType.duplicate) recoverable</div>
     </div>
   </div>
 
-  <div class="section-title">Findings</div>
-  <div class="search-bar">
-    <input type="text" id="searchInput" placeholder="Filter by file name or path..." oninput="filterTable()">
-    <select id="typeFilter" onchange="filterTable()">
+  <div class="section">Findings</div>
+  <div class="filters">
+    <input type="text" id="searchInput" placeholder="Search by file name or path..." oninput="filterTable()">
+    <select id="typeFilter" onchange="syncPills()">
       <option value="">All Types</option>
       <option value="stale">Stale</option>
       <option value="large_file">Large File</option>
@@ -555,7 +618,14 @@ function New-HtmlReport {
       <option value="duplicate">Duplicate</option>
     </select>
   </div>
-  <div class="table-wrap">
+  <div class="pills">
+    <span class="pill active" onclick="setPill(this,'')">All</span>
+    <span class="pill" onclick="setPill(this,'stale')">Stale</span>
+    <span class="pill" onclick="setPill(this,'large_file')">Large Files</span>
+    <span class="pill" onclick="setPill(this,'version_bloat')">Version Bloat</span>
+    <span class="pill" onclick="setPill(this,'duplicate')">Duplicates</span>
+  </div>
+  <div class="tbl-wrap">
     <table id="findingsTable">
       <thead>
         <tr>
@@ -577,28 +647,50 @@ $rowsHtml
   </div>
 </div>
 <div class="footer">
-  Generated by <a href="https://storagescan.app" target="_blank">StorageScan Local</a> &mdash; Your data never left your machine.
+  Generated by <a href="https://storagescan.app" target="_blank">StorageScan Local</a>
+  &nbsp;&bull;&nbsp; Your data never left your machine
+  &nbsp;&bull;&nbsp; <a href="https://github.com/marcelhaasIO/MicrosoftStorageMonster" target="_blank">Open Source on GitHub</a>
 </div>
 <script>
   let sortDir = {};
+  let activeType = '';
+
   function filterTable() {
-    const q = document.getElementById('searchInput').value.toLowerCase();
-    const type = document.getElementById('typeFilter').value;
+    const q    = document.getElementById('searchInput').value.toLowerCase();
+    const type = activeType;
     const rows = document.querySelectorAll('#tableBody tr');
-    let visible = 0;
+    let vis = 0;
     rows.forEach(r => {
-      const text = r.innerText.toLowerCase();
-      const badge = r.querySelector('span') ? r.querySelector('span').innerText.toLowerCase().replace(' ','_') : '';
-      const show = (!q || text.includes(q)) && (!type || badge.includes(type.replace('_','').toLowerCase()) || r.cells[0].innerText.toLowerCase().replace(' ','_').includes(type));
-      r.style.display = show ? '' : 'none';
-      if (show) visible++;
+      const dt  = r.querySelector('[data-type]')?.dataset.type || '';
+      const txt = r.innerText.toLowerCase();
+      const ok  = (!q || txt.includes(q)) && (!type || dt === type);
+      r.style.display = ok ? '' : 'none';
+      if (ok) vis++;
     });
-    document.getElementById('noResults').style.display = visible === 0 ? 'block' : 'none';
+    document.getElementById('noResults').style.display = vis === 0 ? 'block' : 'none';
   }
+
+  function setPill(el, type) {
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    activeType = type;
+    document.getElementById('typeFilter').value = type;
+    filterTable();
+  }
+
+  function syncPills() {
+    const val = document.getElementById('typeFilter').value;
+    document.querySelectorAll('.pill').forEach(p => {
+      p.classList.toggle('active', p.onclick.toString().includes("'" + val + "'") || (val === '' && p.onclick.toString().includes("''")));
+    });
+    activeType = val;
+    filterTable();
+  }
+
   function sortTable(col) {
     const tbody = document.getElementById('tableBody');
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-    const asc = !sortDir[col];
+    const rows  = Array.from(tbody.querySelectorAll('tr'));
+    const asc   = !sortDir[col];
     sortDir = {};
     sortDir[col] = asc;
     rows.sort((a, b) => {
