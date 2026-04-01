@@ -45,6 +45,24 @@
 .PARAMETER ApiBaseUrl
     Base URL of the StorageScan API. Default: https://storagescan.app/api
 
+.PARAMETER TenantId
+    Azure AD Tenant ID for app registration authentication.
+    Must be combined with -ClientId and -ClientSecret.
+    When all three are provided, interactive browser login is skipped entirely.
+
+.PARAMETER ClientId
+    Azure AD Application (client) ID for app registration authentication.
+
+.PARAMETER ClientSecret
+    Client secret for the Azure AD app registration.
+    The app registration requires the SharePoint "Sites.Read.All" app permission
+    (and "Sites.FullControl.All" if scanning all sites via the admin center).
+
+.PARAMETER AdminUrl
+    SharePoint Admin Center URL (e.g. https://contoso-admin.sharepoint.com).
+    Only used when -SiteUrl is "all". If omitted, the script will prompt for it.
+    Providing this enables fully headless / unattended runs when combined with app reg auth.
+
 .EXAMPLE
     .\StorageScan-Local.ps1
 
@@ -57,12 +75,40 @@
 .EXAMPLE
     .\StorageScan-Local.ps1 -ApiKey "ssk_yourkeyhere" -OutputPath "C:\Reports"
 
+.EXAMPLE
+    .\StorageScan-Local.ps1 -TenantId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+                             -ClientId  "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy" `
+                             -ClientSecret "your-client-secret" `
+                             -OutputPath "C:\Reports"
+
+.EXAMPLE
+    .\StorageScan-Local.ps1 -TenantId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+                             -ClientId  "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy" `
+                             -ClientSecret "your-client-secret" `
+                             -SiteUrl "https://contoso.sharepoint.com/sites/IT" `
+                             -ExportCsv
+
+.EXAMPLE
+    # Fully unattended — scan all sites with no browser and no prompts
+    .\StorageScan-Local.ps1 -TenantId "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+                             -ClientId  "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy" `
+                             -ClientSecret "your-client-secret" `
+                             -AdminUrl "https://contoso-admin.sharepoint.com" `
+                             -SiteUrl "all" `
+                             -ExportCsv -ExportJson
+
 .NOTES
     Install PnP.PowerShell before running:
         Install-Module PnP.PowerShell -Scope CurrentUser -Force
 
-    This script uses interactive browser authentication (device code fallback).
-    Your credentials are never stored or transmitted except directly to Microsoft.
+    Authentication modes:
+      Interactive (default) — opens a browser window for Microsoft 365 login.
+      App registration       — pass -TenantId, -ClientId, and -ClientSecret to skip
+                               the browser entirely (ideal for automation / CI).
+
+    Required app permissions for app registration mode:
+      SharePoint > Sites.Read.All          (for single-site scans)
+      SharePoint > Sites.FullControl.All   (for scanning all sites via admin center)
 #>
 
 [CmdletBinding()]
@@ -75,7 +121,17 @@ param(
     [switch]$ExportCsv,
     [switch]$ExportJson,
     [string]$ApiKey = "",
-    [string]$ApiBaseUrl = "https://storagescan.app/api"
+    [string]$ApiBaseUrl = "https://storagescan.app/api",
+
+    # App registration authentication (alternative to interactive browser login)
+    [string]$TenantId = "",
+    [string]$ClientId = "",
+    [string]$ClientSecret = "",
+
+    # SharePoint Admin Center URL — required when SiteUrl is "all".
+    # If omitted, the script will prompt for it interactively.
+    # E.g. https://contoso-admin.sharepoint.com
+    [string]$AdminUrl = ""
 )
 
 Set-StrictMode -Version Latest
@@ -123,6 +179,33 @@ function Ensure-PnPModule {
     Import-Module PnP.PowerShell -ErrorAction Stop
 }
 
+function Connect-ToSite {
+    <#
+    .SYNOPSIS
+        Connect to a SharePoint site using either app registration or interactive auth.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [switch]$SilentlyContinue
+    )
+
+    $ea = if ($SilentlyContinue) { "SilentlyContinue" } else { "Stop" }
+
+    if ($script:ClientId -ne "" -and $script:ClientSecret -ne "" -and $script:TenantId -ne "") {
+        Connect-PnPOnline -Url $Url `
+            -ClientId     $script:ClientId `
+            -ClientSecret $script:ClientSecret `
+            -Tenant       $script:TenantId `
+            -ErrorAction  $ea
+    } else {
+        Connect-PnPOnline -Url $Url -Interactive -ErrorAction $ea
+    }
+}
+
+function Test-AppRegAuth {
+    return ($script:ClientId -ne "" -and $script:ClientSecret -ne "" -and $script:TenantId -ne "")
+}
+
 #endregion
 
 #region Scanning
@@ -146,7 +229,7 @@ function Get-SiteDriveItems {
     $now = Get-Date
 
     try {
-        Connect-PnPOnline -Url $SiteWebUrl -Interactive -ErrorAction Stop
+        Connect-ToSite -Url $SiteWebUrl
     } catch {
         Write-Info "  Could not connect to $SiteWebUrl - skipping. ($_)"
         return $findings
@@ -585,33 +668,36 @@ if (-not (Test-Path $OutputPath)) {
 
 $largeFileBytes = [long]$LargeFileMB * 1MB
 
-Write-Step "Authenticating with Microsoft 365 (browser login will open)..."
-
-try {
-    if ($SiteUrl -eq "all") {
-        Connect-PnPOnline -Url "https://login.microsoftonline.com/common" -Interactive -ErrorAction SilentlyContinue
-    } else {
-        Connect-PnPOnline -Url $SiteUrl -Interactive -ErrorAction Stop
-    }
-} catch {
-    Write-Host "[!] Authentication failed: $_" -ForegroundColor Red
-    exit 1
+if (Test-AppRegAuth) {
+    Write-Step "Authenticating via app registration (TenantId: $TenantId, ClientId: $ClientId)..."
+} else {
+    Write-Step "Authenticating with Microsoft 365 (browser login will open)..."
 }
 
 $allFindings = [System.Collections.Generic.List[hashtable]]::new()
 
 if ($SiteUrl -eq "all") {
     try {
-        $adminUrl = Read-Host "Enter your SharePoint Admin Center URL (e.g. https://contoso-admin.sharepoint.com)"
-        Connect-PnPOnline -Url $adminUrl -Interactive -ErrorAction Stop
-        $siteUrls = Get-AllSiteUrls -AdminUrl $adminUrl
+        $resolvedAdminUrl = if ($AdminUrl -ne "") {
+            $AdminUrl
+        } else {
+            Read-Host "Enter your SharePoint Admin Center URL (e.g. https://contoso-admin.sharepoint.com)"
+        }
+        Connect-ToSite -Url $resolvedAdminUrl
+        $siteUrls = Get-AllSiteUrls -AdminUrl $resolvedAdminUrl
         Write-Success "Found $($siteUrls.Count) site collection(s) to scan."
     } catch {
         Write-Host "[!] Could not enumerate sites: $_" -ForegroundColor Red
-        Write-Info "Tip: Ensure you have SharePoint Administrator role."
+        Write-Info "Tip: Ensure you have SharePoint Administrator role (or Sites.FullControl.All for app reg)."
         exit 1
     }
 } else {
+    try {
+        Connect-ToSite -Url $SiteUrl
+    } catch {
+        Write-Host "[!] Authentication failed: $_" -ForegroundColor Red
+        exit 1
+    }
     $siteUrls = @($SiteUrl)
 }
 
