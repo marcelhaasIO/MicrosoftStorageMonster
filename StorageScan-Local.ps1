@@ -140,10 +140,49 @@ $ErrorActionPreference = "Stop"
 #region Helpers
 
 function Write-Header {
-    Write-Host ""
-    Write-Host "====================================================" -ForegroundColor Cyan
-    Write-Host "  StorageScan Local - SharePoint Storage Analyzer   " -ForegroundColor Cyan
-    Write-Host "====================================================" -ForegroundColor Cyan
+    $orange = "Red"
+    $gold   = "Yellow"
+    $blue   = "Cyan"
+    $dim    = "DarkGray"
+
+    Clear-Host
+
+    # ── Monster (single-quoted here-string = no escaping needed) ────────────
+    $monsterArt = @'
+
+                   .~~~~~~~~~~~~~~~~~~~~~~~~~.
+                  /  (@) (@) (@) (@) (@) (@)   \
+                 |  (@) (@) (@) (@) (@) (@) (@)  |
+                 |       .~~~~~~~~~~~~~~~~.      |
+                 |      | W W W W W W W W W |    |
+                 |       '~~~~~~~~~~~~~~~~'      |
+                  \           ~ CHOMP ~          /
+                   '~~~~~~~~~~~~~~~~~~~~~~~~~'
+                       |    |    |    |    |
+                      /|    |    |    |    |\
+                     /_|____|____|____|____|_\
+
+'@
+    Write-Host $monsterArt -ForegroundColor $orange
+
+    # ── ASCII-art title (figlet "standard" font) ─────────────────────────────
+    $titleArt = @'
+   ____  _                                 ____
+  / ___|| |_ ___  _ __ __ _  __ _  ___   / ___|  ___ __ _ _ __
+  \___ \| __/ _ \| '__/ _` |/ _` |/ _ \  \___ \ / __/ _` | '_ \
+   ___) | || (_) | | | (_| | (_| |  __/   ___) | (_| (_| | | | |
+  |____/ \__\___/|_|  \__,_|\__, |\___|  |____/ \___\__,_|_| |_|
+                             |___/
+
+'@
+    Write-Host $titleArt -ForegroundColor $gold
+
+    # ── Subtitle bar ─────────────────────────────────────────────────────────
+    $sep = '-' * 67
+    Write-Host "  $sep" -ForegroundColor $dim
+    Write-Host '   L O C A L  SCANNER   |  Microsoft 365 Storage Waste Analyzer  ' -ForegroundColor $blue
+    Write-Host '   Privacy-First  *  No cloud required  *  PnP.PowerShell powered ' -ForegroundColor $dim
+    Write-Host "  $sep" -ForegroundColor $dim
     Write-Host ""
 }
 
